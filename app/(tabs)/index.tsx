@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { SafeAreaView, View, Text, ScrollView, TextInput, TouchableOpacity } from "react-native";
+import { SafeAreaView, View, Text, ScrollView, TextInput, TouchableOpacity, Image } from "react-native";
 
-const baseUrl = 'https://imdb-com.p.rapidapi.com/search';
+const baseUrl = process.env.EXPO_PUBLIC_API_URL!;
 const options = {
 	method: 'GET',
 	headers: {
@@ -15,21 +15,27 @@ export default function TabOneScreen() {
 	const [error, setError] = useState<string | null>(null);
 	const [searchTerm, setSearchTerm] = useState<string>('');
 	const [isLoading, setIsLoading] = useState<boolean>(false);
+	const [responseStatus, setResponseStatus] = useState<number | null>(null);
 
 	const fetchData = async (query: string) => {
 		setIsLoading(true);
 		setError(null);
+		setResponseStatus(null);
 		try {
 			console.log('Iniciando la solicitud a la API...');
 			const url = `${baseUrl}?searchTerm=${encodeURIComponent(query)}`;
 			const response = await fetch(url, options);
+			setResponseStatus(response.status);
 			console.log('Respuesta recibida:', response.status);
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
 			const result = await response.json();
-			console.log('Datos recibidos:', result);
+			console.log('Datos recibidos:', JSON.stringify(result, null, 2));
 			setData(result);
 		} catch (error) {
 			console.error('Error al obtener datos:', error);
-			setError('Error al cargar los datos');
+			setError(`Error al cargar los datos: ${error.message}`);
 		} finally {
 			setIsLoading(false);
 		}
@@ -62,11 +68,34 @@ export default function TabOneScreen() {
 				{isLoading ? (
 					<Text>Cargando datos...</Text>
 				) : error ? (
-					<Text className="text-red-500">{error}</Text>
-				) : data ? (
+					<View>
+						<Text className="text-red-500">{error}</Text>
+						<Text>Estado de la respuesta: {responseStatus}</Text>
+					</View>
+				) : data && data.data && data.data.mainSearch ? (
 					<View>
 						<Text className="font-bold mb-2">Resultados de la búsqueda:</Text>
-						<Text>{JSON.stringify(data, null, 2)}</Text>
+						{data.data.mainSearch.edges.length > 0 ? (
+							data.data.mainSearch.edges.map((edge: any, index: number) => {
+								const item = edge.node.entity;
+								return (
+									<View key={index} className="mb-4 border-b border-gray-200 pb-2">
+										<Text className="font-bold">{item.titleText.text}</Text>
+										{item.primaryImage && (
+											<Image
+												source={{ uri: item.primaryImage.url }}
+												className="w-full h-40 rounded-md my-2"
+												resizeMode="cover"
+											/>
+										)}
+										<Text>Año: {item.releaseYear?.year || 'No disponible'}</Text>
+										<Text>Tipo: {item.__typename || 'No especificado'}</Text>
+									</View>
+								);
+							})
+						) : (
+							<Text>No se encontraron resultados para esta búsqueda.</Text>
+						)}
 					</View>
 				) : (
 					<Text>Ingresa un término de búsqueda y presiona Buscar</Text>
